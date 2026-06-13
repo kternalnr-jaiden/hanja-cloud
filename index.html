@@ -735,7 +735,7 @@ function searchLocal(q){
   HDB.forEach(h=>{if(!seen.has(h.c)&&h.r.includes(q)){res.push(h);seen.add(h.c);}});
   return res.slice(0,20);
 }
-const GEMINI_KEY='AIzaSyDR2gru9PS8HBs9Zvaa3CJWg9PioPAAKSU'; // ← 본인 Gemini API 키로 교체
+const GEMINI_KEY='AIzaSyAlSrHxVbSRduciNgrFy9rmGvGZO4A7fj4'; // ← 본인 Gemini API 키로 교체
 
 async function searchAPI(q){
   const icon=document.getElementById('searchIcon');
