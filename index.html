@@ -1,1 +1,962 @@
-index
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>漢字雲 한자운</title>
+<style>
+:root {
+  --ink:#1a1a2e; --paper:#f5f0e8; --silk:#faf7f2;
+  --vermil:#c0392b; --gold:#b8860b; --gold-lt:#f0e0a0;
+  --ash:#7f8c8d; --mist:#e8e2d8; --brush:#2c1810;
+  --celadon:#4a7c59; --radius:14px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Serif KR','Georgia','Batang',serif;background:var(--paper);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center;}
+.app-header{width:100%;background:var(--ink);color:var(--gold-lt);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,0.4);}
+.hanja-title{font-size:1.5em;font-weight:900;letter-spacing:2px;color:#f0d080;}
+.header-sub{font-size:0.75em;color:var(--ash);letter-spacing:1px;margin-left:8px;}
+.sync-badge{font-size:0.72em;padding:3px 9px;border-radius:20px;background:#2a2a4a;color:var(--ash);font-family:monospace;transition:0.3s;}
+.sync-badge.live{background:#1a3a2a;color:#5dbb7e;}
+.tab-bar{width:100%;max-width:580px;display:flex;background:var(--ink);border-bottom:3px solid var(--gold);}
+.tab-item{flex:1;padding:10px 4px;text-align:center;font-size:0.8em;font-weight:700;color:var(--ash);cursor:pointer;transition:0.2s;border-bottom:3px solid transparent;margin-bottom:-3px;}
+.tab-item.active{color:var(--gold-lt);border-bottom-color:var(--gold-lt);}
+.tab-item:hover:not(.active){color:#c8b88a;}
+.container{width:100%;max-width:580px;padding:20px 16px 80px;}
+.section{display:none;}.section.active{display:block;}
+.mode-toggle{display:flex;background:var(--mist);border-radius:10px;padding:4px;margin-bottom:16px;gap:4px;}
+.mode-btn{flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:0.82em;background:transparent;color:var(--ash);transition:0.2s;font-family:inherit;}
+.mode-btn.active{background:white;color:var(--vermil);box-shadow:0 2px 8px rgba(0,0,0,0.12);}
+.field-label{font-size:0.7em;font-weight:700;letter-spacing:1.5px;color:var(--ash);margin-bottom:4px;text-transform:uppercase;}
+.input-style{padding:11px 14px;border:2px solid var(--mist);border-radius:var(--radius);font-size:15px;width:100%;outline:none;transition:border 0.2s;font-family:inherit;background:white;color:var(--ink);margin-bottom:10px;display:block;}
+.input-style:focus{border-color:var(--gold);}
+textarea.input-style{resize:vertical;}
+.btn{padding:12px 20px;border:none;border-radius:var(--radius);cursor:pointer;font-weight:700;font-size:0.9em;transition:0.18s;font-family:inherit;}
+.btn:hover{opacity:0.87;transform:translateY(-1px);}
+.btn-ink{background:var(--ink);color:var(--gold-lt);}
+.btn-vermil{background:var(--vermil);color:white;}
+.btn-celadon{background:var(--celadon);color:white;}
+.btn-muted{background:var(--mist);color:var(--ash);}
+.btn-gold{background:var(--gold);color:white;}
+.btn-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+.btn-grid-2 .btn{width:100%;}
+
+/* ── SEARCH ── */
+.search-wrap{position:relative;margin-bottom:8px;}
+.search-input{padding:13px 50px 13px 14px;border:2px solid var(--mist);border-radius:var(--radius);font-size:17px;width:100%;outline:none;transition:border 0.2s;font-family:inherit;background:white;color:var(--ink);display:block;}
+.search-input:focus{border-color:var(--gold);}
+.search-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:1.1em;pointer-events:none;}
+.candidate-panel{background:white;border:2px solid var(--gold);border-radius:var(--radius);padding:12px;margin-bottom:12px;animation:fadeIn 0.18s ease;}
+.candidate-header{font-size:0.72em;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:10px;display:flex;justify-content:space-between;}
+.candidate-grid{display:flex;flex-wrap:wrap;gap:8px;}
+.candidate-btn{display:flex;flex-direction:column;align-items:center;background:var(--silk);border:2px solid var(--mist);border-radius:12px;padding:10px 10px 8px;cursor:pointer;transition:0.15s;min-width:62px;font-family:inherit;}
+.candidate-btn:hover{border-color:var(--gold);background:var(--gold-lt);transform:translateY(-2px);}
+.cand-char{font-size:1.8em;font-weight:900;color:var(--brush);line-height:1;}
+.cand-read{font-size:0.68em;color:var(--ash);margin-top:4px;line-height:1.3;text-align:center;}
+.cand-rad{font-size:0.62em;color:var(--vermil);margin-top:2px;}
+.selected-box{background:var(--ink);border-radius:var(--radius);padding:14px 18px;margin-bottom:12px;display:flex;align-items:center;gap:16px;}
+.sel-big{font-size:3em;font-weight:900;color:#f0d080;line-height:1;}
+.sel-meta{flex:1;}
+.sel-read{color:var(--gold-lt);font-weight:700;font-size:0.95em;}
+.sel-rad{color:var(--ash);font-size:0.8em;margin-top:3px;}
+.sel-clear{color:var(--ash);cursor:pointer;font-size:1.2em;padding:4px;transition:color 0.2s;}
+.sel-clear:hover{color:var(--vermil);}
+.api-loading{display:flex;align-items:center;gap:10px;padding:14px;color:var(--ash);font-size:0.88em;}
+.spinner{width:18px;height:18px;border:2px solid var(--mist);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── QUICK PASTE ── */
+.quick-box{background:white;border:2px dashed var(--gold);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+.quick-box:focus-within{border-color:var(--vermil);}
+.quick-box textarea{width:100%;border:none;background:transparent;font-size:14px;font-family:inherit;resize:none;outline:none;line-height:1.9;min-height:160px;color:var(--ink);}
+.quick-hint{font-size:0.76em;color:var(--ash);margin-top:8px;line-height:1.6;}
+.preview-item{background:white;border:1px solid var(--mist);border-left:4px solid var(--gold);border-radius:var(--radius);padding:12px 15px;margin-bottom:8px;display:flex;align-items:center;gap:14px;animation:fadeIn 0.2s ease;}
+.prev-big{font-size:2.2em;font-weight:900;color:var(--brush);min-width:52px;text-align:center;line-height:1;}
+.prev-meta{flex:1;}
+.prev-read{font-size:0.98em;font-weight:700;}
+.prev-rad{font-size:0.78em;color:var(--vermil);margin-top:2px;}
+.prev-note{font-size:0.82em;color:var(--ash);margin-top:3px;}
+
+/* ── CARD ── */
+.hanja-card{background:white;border-radius:var(--radius);border:1px solid var(--mist);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;position:relative;}
+.card-big{font-size:2.4em;font-weight:900;color:var(--brush);min-width:56px;text-align:center;line-height:1;}
+.card-meta{flex:1;}
+.delete-btn{position:absolute;right:12px;top:12px;color:var(--vermil);cursor:pointer;font-size:15px;opacity:0.45;transition:0.2s;}
+.delete-btn:hover{opacity:1;}
+.tag-pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.7em;font-weight:700;margin-right:4px;}
+.tag-rad{background:#fde8e8;color:var(--vermil);}
+.tag-s{background:#e8f0fe;color:#2a6dd9;}
+.section-divider{height:1px;background:var(--mist);margin:18px 0;}
+
+/* ── PHRASE CARD ── */
+.phrase-card{background:white;border-radius:var(--radius);border:1px solid var(--mist);border-left:4px solid var(--celadon);padding:13px 15px;margin-bottom:9px;position:relative;}
+.pc-char{font-size:1.2em;font-weight:900;color:var(--brush);}
+.pc-read{font-size:0.88em;color:var(--celadon);margin-top:2px;font-weight:700;}
+.pc-mean{font-size:0.82em;color:var(--ash);margin-top:3px;}
+
+/* ── MODAL ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(26,26,46,0.7);z-index:500;backdrop-filter:blur(2px);}
+.overlay.open{display:block;}
+.modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--silk);border-radius:20px;width:92%;max-width:480px;max-height:88vh;overflow:hidden;z-index:600;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,0.5);}
+.modal.open{display:flex;}
+.modal-header{display:flex;justify-content:space-between;align-items:center;padding:16px 22px 12px;border-bottom:2px solid var(--mist);background:white;flex-shrink:0;}
+.modal-header h3{font-size:1em;color:var(--ink);}
+.modal-close{border:none;background:none;font-size:22px;cursor:pointer;color:var(--ash);line-height:1;padding:0 4px;}
+.modal-close:hover{color:var(--vermil);}
+.modal-body{overflow-y:auto;flex:1;padding:18px 22px 24px;}
+
+/* ── QUIZ ── */
+.quiz-progress{background:var(--mist);border-radius:10px;height:5px;margin-bottom:12px;overflow:hidden;}
+.quiz-fill{background:var(--gold);height:100%;border-radius:10px;transition:width 0.4s;}
+.quiz-counter{text-align:right;font-size:0.8em;color:var(--ash);margin-bottom:14px;}
+.quiz-prompt{background:var(--ink);border-radius:16px;padding:22px 20px 16px;margin-bottom:16px;text-align:center;}
+.quiz-label{font-size:0.68em;font-weight:700;letter-spacing:2px;color:var(--gold);margin-bottom:10px;text-transform:uppercase;}
+.quiz-reading{font-size:1.6em;font-weight:900;color:white;line-height:1.3;}
+.quiz-sub{font-size:0.88em;color:var(--gold-lt);margin-top:4px;opacity:0.8;}
+.quiz-split{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:start;margin-bottom:14px;}
+.quiz-divider{display:flex;align-items:center;justify-content:center;height:200px;padding-top:80px;font-size:1.2em;color:var(--mist);}
+.canvas-pane,.answer-pane{display:flex;flex-direction:column;gap:6px;}
+.pane-label{font-size:0.7em;font-weight:700;letter-spacing:1px;color:var(--ash);text-align:center;text-transform:uppercase;}
+.answer-pane .pane-label{color:var(--vermil);}
+#drawCanvas{border:2px solid var(--mist);border-radius:12px;background:white;cursor:crosshair;touch-action:none;display:block;}
+#drawCanvas.drawing{border-color:var(--gold);}
+.answer-box{width:100%;height:200px;border:2px dashed var(--mist);border-radius:12px;background:#f8f5ef;display:flex;align-items:center;justify-content:center;font-size:5em;font-weight:900;color:var(--brush);opacity:0;transition:opacity 0.5s;position:relative;}
+.answer-box.shown{opacity:1;border:2px solid var(--gold);}
+.answer-box .ans-sub{position:absolute;bottom:8px;font-size:0.2em;color:var(--ash);font-weight:400;}
+.canvas-tools{display:flex;gap:6px;justify-content:center;}
+.tool-btn{padding:5px 12px;border:1px solid var(--mist);border-radius:8px;background:white;cursor:pointer;font-size:0.78em;color:var(--ash);font-family:inherit;transition:0.15s;}
+.tool-btn:hover{border-color:var(--gold);color:var(--ink);}
+.quiz-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+.result-center{text-align:center;padding:16px 0;}
+.result-emoji{font-size:2.8em;margin-bottom:8px;}
+.result-count{font-size:2.6em;font-weight:900;color:var(--gold);}
+
+/* ── UNDO ── */
+#undoBar{display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--gold-lt);padding:13px 22px;border-radius:30px;z-index:800;font-size:0.88em;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,0.4);}
+.undo-link{text-decoration:underline;cursor:pointer;margin-left:10px;color:var(--gold);}
+.empty-state{text-align:center;padding:44px 0;color:var(--ash);}
+.empty-hanja{font-size:3em;margin-bottom:8px;opacity:0.25;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}
+@keyframes brushReveal{from{opacity:0;transform:scale(0.7);}to{opacity:1;transform:scale(1);}}
+@media(max-width:420px){
+  .quiz-split{grid-template-columns:1fr;}
+  .quiz-divider{display:none;}
+  .answer-box{height:150px;font-size:4em;}
+}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div style="display:flex;align-items:baseline;">
+    <span class="hanja-title">漢字雲</span>
+    <span class="header-sub">한자운 · Ian</span>
+  </div>
+  <span class="sync-badge" id="syncBadge">🔵 오프라인</span>
+</header>
+
+<div class="tab-bar">
+  <div class="tab-item active" id="tab-hanja"    onclick="switchTab('hanja')">📖 한자</div>
+  <div class="tab-item"        id="tab-phrase"   onclick="switchTab('phrase')">🔗 성어</div>
+  <div class="tab-item"        id="tab-sentence" onclick="switchTab('sentence')">📜 문장</div>
+  <div class="tab-item"        id="tab-quiz"     onclick="switchTab('quiz')">✏️ 퀴즈</div>
+</div>
+
+<div class="container">
+
+  <!-- ── 한자 탭 ── -->
+  <div class="section active" id="section-hanja">
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="hanja-mode-manual" onclick="setHanjaMode('manual')">✏️ 검색 입력</button>
+      <button class="mode-btn"        id="hanja-mode-quick"  onclick="setHanjaMode('quick')">⚡ 빠른 붙여넣기</button>
+    </div>
+
+    <!-- Manual / Search pane -->
+    <div id="hanjaManualPane">
+      <div class="field-label">한글 음으로 검색 (예: 수, 청, 산)</div>
+      <div class="search-wrap">
+        <input type="text" id="hanjaSearchInput" class="search-input"
+          placeholder="음 입력 후 한자 선택..."
+          oninput="onSearchInput(this.value)"
+          autocomplete="off" spellcheck="false">
+        <span class="search-icon" id="searchIcon">🔍</span>
+      </div>
+      <div id="candidateArea"></div>
+      <div id="selectedArea"></div>
+
+      <div id="hanjaFormFields">
+        <div class="field-label">한자 (漢字)</div>
+        <input type="text" id="hanjaChar" class="input-style" placeholder="예: 水"
+          style="font-size:1.4em;font-weight:900;letter-spacing:4px;background:#f8f5ef;">
+        <div class="field-label">훈·음 (예: 물 수)</div>
+        <input type="text" id="hanjaReading" class="input-style" placeholder="예: 맑을 청">
+        <div class="field-label">부수 (部首) — 자동 입력됩니다</div>
+        <input type="text" id="hanjaRadical" class="input-style" placeholder="예: 水(물 수)">
+        <div class="field-label">획수</div>
+        <input type="text" id="hanjaStrokes" class="input-style" placeholder="예: 11획" style="margin-bottom:14px;">
+        <div class="field-label">메모 (선택)</div>
+        <textarea id="hanjaMemo" class="input-style" rows="2" placeholder="예문, 관련 단어..."></textarea>
+        <button onclick="saveHanja()" class="btn btn-ink" style="width:100%;margin-bottom:14px;">저장 漢字</button>
+      </div>
+    </div>
+
+    <!-- Quick paste pane -->
+    <div id="hanjaQuickPane" style="display:none;">
+      <div class="quick-box">
+        <textarea id="hanjaQuickInput"
+          placeholder="한 줄에 한 한자 | 로 구분
+
+水 | 물 수 | 水(물 수) | 4획
+淸 | 맑을 청 | 水(물 수) | 11획 | 맑다, 깨끗하다
+山 | 메 산 | 山(뫼 산) | 3획"
+          oninput="parseHanjaQuick(this.value)"></textarea>
+        <div class="quick-hint">📋 형식: <b>한자 | 훈·음 | 부수 | 획수 | 메모(선택)</b></div>
+      </div>
+      <div id="hanjaQuickPreview"></div>
+      <div class="btn-grid-2">
+        <button onclick="saveHanjaQuick()" class="btn btn-ink" id="hanjaQuickSaveBtn" disabled style="opacity:0.5;">💾 전체 저장</button>
+        <button onclick="clearHanjaQuick()" class="btn btn-muted">🗑 초기화</button>
+      </div>
+    </div>
+
+    <div class="section-divider"></div>
+    <div class="btn-grid-2">
+      <button onclick="openHanjaList('recent')" class="btn btn-muted">🕐 최근 순</button>
+      <button onclick="openHanjaList('stroke')" class="btn btn-muted">획 순 정렬</button>
+    </div>
+  </div>
+
+  <!-- ── 성어 탭 ── -->
+  <div class="section" id="section-phrase">
+    <div class="field-label">성어 / 숙어 (예: 一石二鳥)</div>
+    <input type="text" id="phraseChar" class="input-style" placeholder="예: 一石二鳥">
+    <div class="field-label">독음</div>
+    <input type="text" id="phraseReading" class="input-style" placeholder="예: 일석이조">
+    <div class="field-label">뜻</div>
+    <textarea id="phraseMeaning" class="input-style" rows="2" placeholder="한 가지 일로 두 가지 이익을 얻음"></textarea>
+    <button onclick="savePhrase()" class="btn btn-celadon" style="width:100%;margin-bottom:16px;">성어 저장</button>
+    <div class="btn-grid-2">
+      <button onclick="startPhraseReview()" class="btn btn-ink">🔁 카드 복습</button>
+      <button onclick="openPhraseList()"    class="btn btn-muted">📋 전체 보기</button>
+    </div>
+  </div>
+
+  <!-- ── 문장 탭 ── -->
+  <div class="section" id="section-sentence">
+    <div class="field-label">한문 / 고전 문장</div>
+    <textarea id="sentChar" class="input-style" rows="2" placeholder="예: 學而時習之 不亦說乎"></textarea>
+    <div class="field-label">독음</div>
+    <input type="text" id="sentReading" class="input-style" placeholder="예: 학이시습지 불역열호">
+    <div class="field-label">해석</div>
+    <textarea id="sentMeaning" class="input-style" rows="2" placeholder="배우고 때때로 익히면 또한 기쁘지 아니한가"></textarea>
+    <div class="field-label">출전 (선택)</div>
+    <input type="text" id="sentSource" class="input-style" placeholder="예: 論語 學而篇">
+    <button onclick="saveSentence()" class="btn btn-gold" style="width:100%;margin-bottom:16px;color:white;">문장 저장</button>
+    <div class="btn-grid-2">
+      <button onclick="startSentenceReview()" class="btn btn-ink">🔁 문장 복습</button>
+      <button onclick="openSentenceList()"    class="btn btn-muted">📋 전체 보기</button>
+    </div>
+  </div>
+
+  <!-- ── 퀴즈 탭 ── -->
+  <div class="section" id="section-quiz">
+    <div style="background:var(--ink);border-radius:16px;padding:20px;margin-bottom:18px;text-align:center;">
+      <div style="font-size:3em;margin-bottom:8px;">✏️</div>
+      <div style="color:var(--gold-lt);font-size:1em;font-weight:700;margin-bottom:4px;">붓글씨 쓰기 퀴즈</div>
+      <div style="color:var(--ash);font-size:0.82em;line-height:1.6;">훈·음을 보고 한자를 직접 써보세요<br>정답 확인 후 오른쪽에서 실제 한자를 확인합니다</div>
+    </div>
+    <div class="field-label" style="margin-bottom:8px;">퀴즈 범위</div>
+    <div class="btn-grid-2" style="margin-top:0;margin-bottom:14px;">
+      <button onclick="startQuiz('all')"   class="btn btn-vermil">📚 전체 한자</button>
+      <button onclick="startQuiz('today')" class="btn btn-ink">📅 오늘 추가</button>
+    </div>
+    <div class="section-divider"></div>
+    <div style="font-size:0.8em;color:var(--ash);line-height:1.7;background:white;border-radius:12px;padding:14px;">
+      <b style="color:var(--ink);display:block;margin-bottom:6px;">📖 퀴즈 사용법</b>
+      1. 훈·음과 부수를 보고 왼쪽 캔버스에 한자를 써보세요<br>
+      2. 「정답 보기」를 누르면 오른쪽에 정답 한자가 나타납니다<br>
+      3. 스스로 채점 후 「다음」으로 넘어가세요
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<div class="overlay" id="overlay" onclick="handleOverlayClick()"></div>
+<div class="modal" id="modal">
+  <div class="modal-header">
+    <h3 id="modalTitle">–</h3>
+    <button class="modal-close" onclick="closeModal()">✕</button>
+  </div>
+  <div class="modal-body" id="modalBody"></div>
+</div>
+<div id="undoBar">삭제되었습니다.<span class="undo-link" onclick="undoDelete()">되돌리기</span></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  HANJA DB (내장 한자 사전 — 음별 색인)
+// ══════════════════════════════════════════════════════
+const HDB=[
+  {c:"家",r:"집 가",rad:"宀",rn:"집 면",s:"10",m:"집, 가정"},
+  {c:"歌",r:"노래 가",rad:"欠",rn:"하품 흠",s:"14",m:"노래"},
+  {c:"加",r:"더할 가",rad:"力",rn:"힘 력",s:"5",m:"더하다"},
+  {c:"可",r:"옳을 가",rad:"口",rn:"입 구",s:"5",m:"가능하다"},
+  {c:"價",r:"값 가",rad:"人",rn:"사람 인",s:"15",m:"가격"},
+  {c:"各",r:"각각 각",rad:"口",rn:"입 구",s:"6",m:"각각"},
+  {c:"角",r:"뿔 각",rad:"角",rn:"뿔 각",s:"7",m:"뿔, 모서리"},
+  {c:"覺",r:"깨달을 각",rad:"見",rn:"볼 견",s:"20",m:"깨닫다"},
+  {c:"間",r:"사이 간",rad:"門",rn:"문 문",s:"12",m:"사이, 틈"},
+  {c:"江",r:"강 강",rad:"水",rn:"물 수",s:"6",m:"강"},
+  {c:"強",r:"강할 강",rad:"弓",rn:"활 궁",s:"11",m:"강하다"},
+  {c:"開",r:"열 개",rad:"門",rn:"문 문",s:"12",m:"열다"},
+  {c:"改",r:"고칠 개",rad:"攴",rn:"칠 복",s:"7",m:"고치다"},
+  {c:"去",r:"갈 거",rad:"厶",rn:"사사 사",s:"5",m:"가다"},
+  {c:"巨",r:"클 거",rad:"工",rn:"장인 공",s:"5",m:"크다"},
+  {c:"見",r:"볼 견",rad:"見",rn:"볼 견",s:"7",m:"보다"},
+  {c:"決",r:"결단할 결",rad:"水",rn:"물 수",s:"7",m:"결단하다"},
+  {c:"結",r:"맺을 결",rad:"糸",rn:"실 사",s:"12",m:"맺다"},
+  {c:"京",r:"서울 경",rad:"亠",rn:"돼지해머리두",s:"8",m:"서울"},
+  {c:"敬",r:"공경할 경",rad:"攴",rn:"칠 복",s:"12",m:"공경하다"},
+  {c:"景",r:"볕 경",rad:"日",rn:"날 일",s:"12",m:"경치"},
+  {c:"輕",r:"가벼울 경",rad:"車",rn:"수레 거",s:"14",m:"가볍다"},
+  {c:"界",r:"경계 계",rad:"田",rn:"밭 전",s:"9",m:"경계"},
+  {c:"計",r:"셀 계",rad:"言",rn:"말씀 언",s:"9",m:"세다"},
+  {c:"古",r:"옛 고",rad:"口",rn:"입 구",s:"5",m:"옛날"},
+  {c:"高",r:"높을 고",rad:"高",rn:"높을 고",s:"10",m:"높다"},
+  {c:"苦",r:"쓸 고",rad:"艸",rn:"풀 초",s:"9",m:"쓰다"},
+  {c:"公",r:"공평할 공",rad:"八",rn:"여덟 팔",s:"4",m:"공평하다"},
+  {c:"工",r:"장인 공",rad:"工",rn:"장인 공",s:"3",m:"장인"},
+  {c:"空",r:"빌 공",rad:"穴",rn:"구멍 혈",s:"8",m:"비다"},
+  {c:"功",r:"공 공",rad:"力",rn:"힘 력",s:"5",m:"공로"},
+  {c:"果",r:"열매 과",rad:"木",rn:"나무 목",s:"8",m:"열매"},
+  {c:"過",r:"지날 과",rad:"辵",rn:"쉬엄쉬엄갈 착",s:"12",m:"지나다"},
+  {c:"關",r:"관계할 관",rad:"門",rn:"문 문",s:"19",m:"관계하다"},
+  {c:"光",r:"빛 광",rad:"儿",rn:"어진사람 인",s:"6",m:"빛"},
+  {c:"校",r:"학교 교",rad:"木",rn:"나무 목",s:"10",m:"학교"},
+  {c:"敎",r:"가르칠 교",rad:"攴",rn:"칠 복",s:"11",m:"가르치다"},
+  {c:"九",r:"아홉 구",rad:"乙",rn:"새 을",s:"2",m:"아홉"},
+  {c:"口",r:"입 구",rad:"口",rn:"입 구",s:"3",m:"입"},
+  {c:"國",r:"나라 국",rad:"囗",rn:"에울 위",s:"11",m:"나라"},
+  {c:"求",r:"구할 구",rad:"水",rn:"물 수",s:"7",m:"구하다"},
+  {c:"球",r:"공 구",rad:"玉",rn:"구슬 옥",s:"11",m:"공"},
+  {c:"君",r:"임금 군",rad:"口",rn:"입 구",s:"7",m:"임금"},
+  {c:"軍",r:"군사 군",rad:"車",rn:"수레 거",s:"9",m:"군사"},
+  {c:"貴",r:"귀할 귀",rad:"貝",rn:"조개 패",s:"12",m:"귀하다"},
+  {c:"近",r:"가까울 근",rad:"辵",rn:"쉬엄쉬엄갈 착",s:"7",m:"가깝다"},
+  {c:"根",r:"뿌리 근",rad:"木",rn:"나무 목",s:"10",m:"뿌리"},
+  {c:"金",r:"쇠 금",rad:"金",rn:"쇠 금",s:"8",m:"금, 쇠"},
+  {c:"今",r:"이제 금",rad:"人",rn:"사람 인",s:"4",m:"지금"},
+  {c:"氣",r:"기운 기",rad:"气",rn:"기운 기",s:"10",m:"기운"},
+  {c:"記",r:"기록할 기",rad:"言",rn:"말씀 언",s:"10",m:"기록하다"},
+  {c:"期",r:"기약할 기",rad:"月",rn:"달 월",s:"12",m:"기약하다"},
+  {c:"起",r:"일어날 기",rad:"走",rn:"달릴 주",s:"10",m:"일어나다"},
+  {c:"基",r:"터 기",rad:"土",rn:"흙 토",s:"11",m:"터, 기초"},
+  {c:"南",r:"남녘 남",rad:"十",rn:"열 십",s:"9",m:"남쪽"},
+  {c:"男",r:"사내 남",rad:"田",rn:"밭 전",s:"7",m:"사내"},
+  {c:"內",r:"안 내",rad:"入",rn:"들 입",s:"4",m:"안"},
+  {c:"年",r:"해 년",rad:"干",rn:"방패 간",s:"6",m:"해, 년"},
+  {c:"多",r:"많을 다",rad:"夕",rn:"저녁 석",s:"6",m:"많다"},
+  {c:"大",r:"큰 대",rad:"大",rn:"큰 대",s:"3",m:"크다"},
+  {c:"代",r:"대신할 대",rad:"人",rn:"사람 인",s:"5",m:"대신하다"},
+  {c:"對",r:"대할 대",rad:"寸",rn:"마디 촌",s:"14",m:"대하다"},
+  {c:"道",r:"길 도",rad:"辵",rn:"쉬엄쉬엄갈 착",s:"12",m:"길, 도리"},
+  {c:"都",r:"도읍 도",rad:"邑",rn:"고을 읍",s:"11",m:"도읍"},
+  {c:"圖",r:"그림 도",rad:"囗",rn:"에울 위",s:"14",m:"그림"},
+  {c:"讀",r:"읽을 독",rad:"言",rn:"말씀 언",s:"22",m:"읽다"},
+  {c:"東",r:"동녘 동",rad:"木",rn:"나무 목",s:"8",m:"동쪽"},
+  {c:"動",r:"움직일 동",rad:"力",rn:"힘 력",s:"11",m:"움직이다"},
+  {c:"同",r:"한가지 동",rad:"口",rn:"입 구",s:"6",m:"같다"},
+  {c:"冬",r:"겨울 동",rad:"冫",rn:"얼음 빙",s:"5",m:"겨울"},
+  {c:"等",r:"무리 등",rad:"竹",rn:"대 죽",s:"12",m:"등급"},
+  {c:"登",r:"오를 등",rad:"癶",rn:"필 발",s:"12",m:"오르다"},
+  {c:"力",r:"힘 력",rad:"力",rn:"힘 력",s:"2",m:"힘"},
+  {c:"歷",r:"지낼 력",rad:"止",rn:"발 지",s:"16",m:"역사"},
+  {c:"禮",r:"예도 례",rad:"示",rn:"보일 시",s:"18",m:"예의"},
+  {c:"路",r:"길 로",rad:"足",rn:"발 족",s:"13",m:"길"},
+  {c:"老",r:"늙을 로",rad:"老",rn:"늙을 로",s:"6",m:"늙다"},
+  {c:"流",r:"흐를 류",rad:"水",rn:"물 수",s:"10",m:"흐르다"},
+  {c:"理",r:"다스릴 리",rad:"玉",rn:"구슬 옥",s:"11",m:"다스리다"},
+  {c:"利",r:"이로울 리",rad:"刀",rn:"칼 도",s:"7",m:"이롭다"},
+  {c:"林",r:"수풀 림",rad:"木",rn:"나무 목",s:"8",m:"수풀"},
+  {c:"馬",r:"말 마",rad:"馬",rn:"말 마",s:"10",m:"말"},
+  {c:"萬",r:"일만 만",rad:"艸",rn:"풀 초",s:"13",m:"만(10000)"},
+  {c:"望",r:"바랄 망",rad:"月",rn:"달 월",s:"11",m:"바라다"},
+  {c:"明",r:"밝을 명",rad:"日",rn:"날 일",s:"8",m:"밝다"},
+  {c:"名",r:"이름 명",rad:"口",rn:"입 구",s:"6",m:"이름"},
+  {c:"命",r:"목숨 명",rad:"口",rn:"입 구",s:"8",m:"목숨"},
+  {c:"母",r:"어미 모",rad:"母",rn:"어미 모",s:"5",m:"어머니"},
+  {c:"木",r:"나무 목",rad:"木",rn:"나무 목",s:"4",m:"나무"},
+  {c:"目",r:"눈 목",rad:"目",rn:"눈 목",s:"5",m:"눈"},
+  {c:"文",r:"글월 문",rad:"文",rn:"글월 문",s:"4",m:"글"},
+  {c:"門",r:"문 문",rad:"門",rn:"문 문",s:"8",m:"문"},
+  {c:"問",r:"물을 문",rad:"口",rn:"입 구",s:"11",m:"묻다"},
+  {c:"美",r:"아름다울 미",rad:"羊",rn:"양 양",s:"9",m:"아름답다"},
+  {c:"民",r:"백성 민",rad:"氏",rn:"성씨 씨",s:"5",m:"백성"},
+  {c:"方",r:"모 방",rad:"方",rn:"모 방",s:"4",m:"방향"},
+  {c:"白",r:"흰 백",rad:"白",rn:"흰 백",s:"5",m:"희다"},
+  {c:"百",r:"일백 백",rad:"白",rn:"흰 백",s:"6",m:"백(100)"},
+  {c:"別",r:"나눌 별",rad:"刀",rn:"칼 도",s:"7",m:"나누다"},
+  {c:"變",r:"변할 변",rad:"攴",rn:"칠 복",s:"23",m:"변하다"},
+  {c:"病",r:"병들 병",rad:"疒",rn:"병질 녁",s:"10",m:"병"},
+  {c:"保",r:"지킬 보",rad:"人",rn:"사람 인",s:"9",m:"지키다"},
+  {c:"福",r:"복 복",rad:"示",rn:"보일 시",s:"13",m:"복"},
+  {c:"父",r:"아비 부",rad:"父",rn:"아비 부",s:"4",m:"아버지"},
+  {c:"富",r:"부유할 부",rad:"宀",rn:"집 면",s:"12",m:"부유하다"},
+  {c:"北",r:"북녘 북",rad:"匕",rn:"비수 비",s:"5",m:"북쪽"},
+  {c:"分",r:"나눌 분",rad:"刀",rn:"칼 도",s:"4",m:"나누다"},
+  {c:"四",r:"넉 사",rad:"囗",rn:"에울 위",s:"5",m:"넷"},
+  {c:"事",r:"일 사",rad:"亅",rn:"갈고리 궐",s:"8",m:"일"},
+  {c:"思",r:"생각 사",rad:"心",rn:"마음 심",s:"9",m:"생각하다"},
+  {c:"師",r:"스승 사",rad:"巾",rn:"수건 건",s:"10",m:"스승"},
+  {c:"山",r:"메 산",rad:"山",rn:"뫼 산",s:"3",m:"산"},
+  {c:"算",r:"셈 산",rad:"竹",rn:"대 죽",s:"14",m:"셈하다"},
+  {c:"上",r:"위 상",rad:"一",rn:"한 일",s:"3",m:"위"},
+  {c:"相",r:"서로 상",rad:"目",rn:"눈 목",s:"9",m:"서로"},
+  {c:"色",r:"빛 색",rad:"色",rn:"빛 색",s:"6",m:"색깔"},
+  {c:"生",r:"날 생",rad:"生",rn:"날 생",s:"5",m:"나다, 살다"},
+  {c:"西",r:"서녘 서",rad:"西",rn:"서녘 서",s:"6",m:"서쪽"},
+  {c:"書",r:"글 서",rad:"日",rn:"날 일",s:"10",m:"글, 책"},
+  {c:"先",r:"먼저 선",rad:"儿",rn:"어진사람 인",s:"6",m:"먼저"},
+  {c:"善",r:"착할 선",rad:"口",rn:"입 구",s:"12",m:"착하다"},
+  {c:"成",r:"이룰 성",rad:"戈",rn:"창 과",s:"6",m:"이루다"},
+  {c:"性",r:"성품 성",rad:"心",rn:"마음 심",s:"8",m:"성품"},
+  {c:"姓",r:"성씨 성",rad:"女",rn:"여자 여",s:"8",m:"성씨"},
+  {c:"誠",r:"정성 성",rad:"言",rn:"말씀 언",s:"13",m:"정성"},
+  {c:"星",r:"별 성",rad:"日",rn:"날 일",s:"9",m:"별"},
+  {c:"世",r:"인간 세",rad:"一",rn:"한 일",s:"5",m:"세상"},
+  {c:"小",r:"작을 소",rad:"小",rn:"작을 소",s:"3",m:"작다"},
+  {c:"笑",r:"웃을 소",rad:"竹",rn:"대 죽",s:"10",m:"웃다"},
+  {c:"少",r:"적을 소",rad:"小",rn:"작을 소",s:"4",m:"적다"},
+  {c:"水",r:"물 수",rad:"水",rn:"물 수",s:"4",m:"물"},
+  {c:"手",r:"손 수",rad:"手",rn:"손 수",s:"4",m:"손"},
+  {c:"數",r:"셈 수",rad:"攴",rn:"칠 복",s:"15",m:"수"},
+  {c:"受",r:"받을 수",rad:"又",rn:"또 우",s:"8",m:"받다"},
+  {c:"樹",r:"나무 수",rad:"木",rn:"나무 목",s:"16",m:"나무"},
+  {c:"首",r:"머리 수",rad:"首",rn:"머리 수",s:"9",m:"머리"},
+  {c:"修",r:"닦을 수",rad:"人",rn:"사람 인",s:"10",m:"닦다"},
+  {c:"守",r:"지킬 수",rad:"宀",rn:"집 면",s:"6",m:"지키다"},
+  {c:"壽",r:"목숨 수",rad:"士",rn:"선비 사",s:"14",m:"목숨, 장수"},
+  {c:"秀",r:"빼어날 수",rad:"禾",rn:"벼 화",s:"7",m:"빼어나다"},
+  {c:"順",r:"순할 순",rad:"頁",rn:"머리 혈",s:"12",m:"순하다"},
+  {c:"時",r:"때 시",rad:"日",rn:"날 일",s:"10",m:"때"},
+  {c:"始",r:"비롯할 시",rad:"女",rn:"여자 여",s:"8",m:"비롯하다"},
+  {c:"詩",r:"시 시",rad:"言",rn:"말씀 언",s:"13",m:"시"},
+  {c:"食",r:"밥 식",rad:"食",rn:"밥 식",s:"9",m:"밥, 먹다"},
+  {c:"植",r:"심을 식",rad:"木",rn:"나무 목",s:"12",m:"심다"},
+  {c:"識",r:"알 식",rad:"言",rn:"말씀 언",s:"19",m:"알다"},
+  {c:"新",r:"새 신",rad:"斤",rn:"도끼 근",s:"13",m:"새"},
+  {c:"信",r:"믿을 신",rad:"人",rn:"사람 인",s:"9",m:"믿다"},
+  {c:"神",r:"귀신 신",rad:"示",rn:"보일 시",s:"9",m:"귀신, 신"},
+  {c:"身",r:"몸 신",rad:"身",rn:"몸 신",s:"7",m:"몸"},
+  {c:"心",r:"마음 심",rad:"心",rn:"마음 심",s:"4",m:"마음"},
+  {c:"深",r:"깊을 심",rad:"水",rn:"물 수",s:"11",m:"깊다"},
+  {c:"安",r:"편안 안",rad:"宀",rn:"집 면",s:"6",m:"편안하다"},
+  {c:"愛",r:"사랑 애",rad:"心",rn:"마음 심",s:"13",m:"사랑"},
+  {c:"夜",r:"밤 야",rad:"夕",rn:"저녁 석",s:"8",m:"밤"},
+  {c:"弱",r:"약할 약",rad:"弓",rn:"활 궁",s:"10",m:"약하다"},
+  {c:"藥",r:"약 약",rad:"艸",rn:"풀 초",s:"18",m:"약"},
+  {c:"陽",r:"볕 양",rad:"阜",rn:"언덕 부",s:"12",m:"태양"},
+  {c:"洋",r:"큰바다 양",rad:"水",rn:"물 수",s:"9",m:"큰바다"},
+  {c:"養",r:"기를 양",rad:"食",rn:"밥 식",s:"15",m:"기르다"},
+  {c:"語",r:"말씀 어",rad:"言",rn:"말씀 언",s:"14",m:"말씀"},
+  {c:"魚",r:"물고기 어",rad:"魚",rn:"물고기 어",s:"11",m:"물고기"},
+  {c:"言",r:"말씀 언",rad:"言",rn:"말씀 언",s:"7",m:"말씀"},
+  {c:"業",r:"업 업",rad:"木",rn:"나무 목",s:"13",m:"직업"},
+  {c:"女",r:"여자 여",rad:"女",rn:"여자 여",s:"3",m:"여자"},
+  {c:"然",r:"그럴 연",rad:"火",rn:"불 화",s:"12",m:"그렇다"},
+  {c:"英",r:"꽃부리 영",rad:"艸",rn:"풀 초",s:"8",m:"꽃부리"},
+  {c:"永",r:"길 영",rad:"水",rn:"물 수",s:"5",m:"영원"},
+  {c:"五",r:"다섯 오",rad:"二",rn:"두 이",s:"4",m:"다섯"},
+  {c:"王",r:"임금 왕",rad:"王",rn:"임금 왕",s:"4",m:"임금"},
+  {c:"外",r:"바깥 외",rad:"夕",rn:"저녁 석",s:"5",m:"바깥"},
+  {c:"用",r:"쓸 용",rad:"用",rn:"쓸 용",s:"5",m:"쓰다"},
+  {c:"勇",r:"날랠 용",rad:"力",rn:"힘 력",s:"9",m:"날래다"},
+  {c:"右",r:"오른 우",rad:"口",rn:"입 구",s:"5",m:"오른쪽"},
+  {c:"友",r:"벗 우",rad:"又",rn:"또 우",s:"4",m:"벗"},
+  {c:"雨",r:"비 우",rad:"雨",rn:"비 우",s:"8",m:"비"},
+  {c:"元",r:"으뜸 원",rad:"儿",rn:"어진사람 인",s:"4",m:"으뜸"},
+  {c:"遠",r:"멀 원",rad:"辵",rn:"쉬엄쉬엄갈 착",s:"13",m:"멀다"},
+  {c:"有",r:"있을 유",rad:"月",rn:"달 월",s:"6",m:"있다"},
+  {c:"六",r:"여섯 육",rad:"八",rn:"여덟 팔",s:"4",m:"여섯"},
+  {c:"育",r:"기를 육",rad:"肉",rn:"고기 육",s:"8",m:"기르다"},
+  {c:"恩",r:"은혜 은",rad:"心",rn:"마음 심",s:"10",m:"은혜"},
+  {c:"音",r:"소리 음",rad:"音",rn:"소리 음",s:"9",m:"소리"},
+  {c:"意",r:"뜻 의",rad:"心",rn:"마음 심",s:"13",m:"뜻"},
+  {c:"義",r:"옳을 의",rad:"羊",rn:"양 양",s:"13",m:"의리"},
+  {c:"醫",r:"의원 의",rad:"酉",rn:"닭 유",s:"18",m:"의학"},
+  {c:"二",r:"두 이",rad:"二",rn:"두 이",s:"2",m:"둘"},
+  {c:"耳",r:"귀 이",rad:"耳",rn:"귀 이",s:"6",m:"귀"},
+  {c:"人",r:"사람 인",rad:"人",rn:"사람 인",s:"2",m:"사람"},
+  {c:"仁",r:"어질 인",rad:"人",rn:"사람 인",s:"4",m:"어질다"},
+  {c:"一",r:"한 일",rad:"一",rn:"한 일",s:"1",m:"하나"},
+  {c:"日",r:"날 일",rad:"日",rn:"날 일",s:"4",m:"날, 해"},
+  {c:"子",r:"아들 자",rad:"子",rn:"아들 자",s:"3",m:"아들"},
+  {c:"字",r:"글자 자",rad:"子",rn:"아들 자",s:"6",m:"글자"},
+  {c:"自",r:"스스로 자",rad:"自",rn:"스스로 자",s:"6",m:"스스로"},
+  {c:"作",r:"지을 작",rad:"人",rn:"사람 인",s:"7",m:"짓다"},
+  {c:"長",r:"길 장",rad:"長",rn:"길 장",s:"8",m:"길다, 어른"},
+  {c:"才",r:"재주 재",rad:"手",rn:"손 수",s:"3",m:"재주"},
+  {c:"全",r:"온전할 전",rad:"入",rn:"들 입",s:"6",m:"온전하다"},
+  {c:"前",r:"앞 전",rad:"刀",rn:"칼 도",s:"9",m:"앞"},
+  {c:"電",r:"번개 전",rad:"雨",rn:"비 우",s:"13",m:"전기"},
+  {c:"田",r:"밭 전",rad:"田",rn:"밭 전",s:"5",m:"밭"},
+  {c:"正",r:"바를 정",rad:"止",rn:"발 지",s:"5",m:"바르다"},
+  {c:"情",r:"뜻 정",rad:"心",rn:"마음 심",s:"11",m:"감정"},
+  {c:"定",r:"정할 정",rad:"宀",rn:"집 면",s:"8",m:"정하다"},
+  {c:"靜",r:"고요할 정",rad:"青",rn:"푸를 청",s:"16",m:"고요하다"},
+  {c:"第",r:"차례 제",rad:"竹",rn:"대 죽",s:"11",m:"차례"},
+  {c:"朝",r:"아침 조",rad:"月",rn:"달 월",s:"12",m:"아침"},
+  {c:"鳥",r:"새 조",rad:"鳥",rn:"새 조",s:"11",m:"새"},
+  {c:"足",r:"발 족",rad:"足",rn:"발 족",s:"7",m:"발"},
+  {c:"宗",r:"마루 종",rad:"宀",rn:"집 면",s:"8",m:"마루"},
+  {c:"終",r:"마칠 종",rad:"糸",rn:"실 사",s:"11",m:"마치다"},
+  {c:"主",r:"주인 주",rad:"丶",rn:"점 주",s:"5",m:"주인"},
+  {c:"朱",r:"붉을 주",rad:"木",rn:"나무 목",s:"6",m:"붉다"},
+  {c:"中",r:"가운데 중",rad:"丨",rn:"뚫을 곤",s:"4",m:"가운데"},
+  {c:"重",r:"무거울 중",rad:"里",rn:"마을 리",s:"9",m:"무겁다"},
+  {c:"地",r:"땅 지",rad:"土",rn:"흙 토",s:"6",m:"땅"},
+  {c:"知",r:"알 지",rad:"矢",rn:"화살 시",s:"8",m:"알다"},
+  {c:"志",r:"뜻 지",rad:"心",rn:"마음 심",s:"7",m:"뜻"},
+  {c:"眞",r:"참 진",rad:"目",rn:"눈 목",s:"10",m:"참"},
+  {c:"進",r:"나아갈 진",rad:"辵",rn:"쉬엄쉬엄갈 착",s:"11",m:"나아가다"},
+  {c:"天",r:"하늘 천",rad:"大",rn:"큰 대",s:"4",m:"하늘"},
+  {c:"千",r:"일천 천",rad:"十",rn:"열 십",s:"3",m:"천(1000)"},
+  {c:"川",r:"내 천",rad:"川",rn:"내 천",s:"3",m:"내, 강"},
+  {c:"靑",r:"푸를 청",rad:"青",rn:"푸를 청",s:"8",m:"푸르다"},
+  {c:"淸",r:"맑을 청",rad:"水",rn:"물 수",s:"11",m:"맑다"},
+  {c:"聽",r:"들을 청",rad:"耳",rn:"귀 이",s:"22",m:"듣다"},
+  {c:"請",r:"청할 청",rad:"言",rn:"말씀 언",s:"15",m:"청하다"},
+  {c:"草",r:"풀 초",rad:"艸",rn:"풀 초",s:"9",m:"풀"},
+  {c:"秋",r:"가을 추",rad:"禾",rn:"벼 화",s:"9",m:"가을"},
+  {c:"出",r:"날 출",rad:"凵",rn:"입벌릴 감",s:"5",m:"나가다"},
+  {c:"忠",r:"충성 충",rad:"心",rn:"마음 심",s:"8",m:"충성"},
+  {c:"治",r:"다스릴 치",rad:"水",rn:"물 수",s:"8",m:"다스리다"},
+  {c:"七",r:"일곱 칠",rad:"一",rn:"한 일",s:"2",m:"일곱"},
+  {c:"親",r:"친할 친",rad:"見",rn:"볼 견",s:"16",m:"친하다"},
+  {c:"土",r:"흙 토",rad:"土",rn:"흙 토",s:"3",m:"흙"},
+  {c:"通",r:"통할 통",rad:"辵",rn:"쉬엄쉬엄갈 착",s:"10",m:"통하다"},
+  {c:"八",r:"여덟 팔",rad:"八",rn:"여덟 팔",s:"2",m:"여덟"},
+  {c:"平",r:"평평할 평",rad:"干",rn:"방패 간",s:"5",m:"평평하다"},
+  {c:"風",r:"바람 풍",rad:"風",rn:"바람 풍",s:"9",m:"바람"},
+  {c:"下",r:"아래 하",rad:"一",rn:"한 일",s:"3",m:"아래"},
+  {c:"夏",r:"여름 하",rad:"夂",rn:"천천히걸을 치",s:"10",m:"여름"},
+  {c:"河",r:"물 하",rad:"Water",rn:"물 수",s:"8",m:"강"},
+  {c:"學",r:"배울 학",rad:"子",rn:"아들 자",s:"16",m:"배우다"},
+  {c:"韓",r:"나라 한",rad:"韋",rn:"가죽 위",s:"17",m:"한국"},
+  {c:"漢",r:"한수 한",rad:"Water",rn:"물 수",s:"14",m:"한나라"},
+  {c:"寒",r:"찰 한",rad:"宀",rn:"집 면",s:"12",m:"차다"},
+  {c:"海",r:"바다 해",rad:"Water",rn:"물 수",s:"10",m:"바다"},
+  {c:"行",r:"다닐 행",rad:"行",rn:"다닐 행",s:"6",m:"다니다"},
+  {c:"香",r:"향기 향",rad:"香",rn:"향기 향",s:"9",m:"향기"},
+  {c:"現",r:"나타날 현",rad:"玉",rn:"구슬 옥",s:"11",m:"나타나다"},
+  {c:"形",r:"형상 형",rad:"彡",rn:"터럭 삼",s:"7",m:"형상"},
+  {c:"好",r:"좋을 호",rad:"女",rn:"여자 여",s:"6",m:"좋다"},
+  {c:"湖",r:"호수 호",rad:"Water",rn:"물 수",s:"12",m:"호수"},
+  {c:"火",r:"불 화",rad:"火",rn:"불 화",s:"4",m:"불"},
+  {c:"花",r:"꽃 화",rad:"艸",rn:"풀 초",s:"7",m:"꽃"},
+  {c:"和",r:"화할 화",rad:"口",rn:"입 구",s:"8",m:"화하다"},
+  {c:"話",r:"말씀 화",rad:"言",rn:"말씀 언",s:"13",m:"말씀"},
+  {c:"化",r:"될 화",rad:"人",rn:"사람 인",s:"4",m:"되다"},
+  {c:"會",r:"모일 회",rad:"日",rn:"날 일",s:"13",m:"모이다"},
+  {c:"孝",r:"효도 효",rad:"子",rn:"아들 자",s:"7",m:"효도"},
+  {c:"後",r:"뒤 후",rad:"彳",rn:"조금걸을 척",s:"9",m:"뒤"},
+  {c:"訓",r:"가르칠 훈",rad:"言",rn:"말씀 언",s:"10",m:"가르치다"},
+  {c:"興",r:"일어날 흥",rad:"臼",rn:"절구 구",s:"16",m:"일어나다"},
+  {c:"喜",r:"기쁠 희",rad:"口",rn:"입 구",s:"12",m:"기쁘다"},
+];
+// 音 색인 빌드
+const HIDX={};
+HDB.forEach(h=>{
+  const snd=h.r.trim().split(' ').pop();
+  if(!HIDX[snd])HIDX[snd]=[];
+  HIDX[snd].push(h);
+});
+
+// ══════════════════════════════════════════════════════
+//  FIREBASE FIRESTORE
+// ══════════════════════════════════════════════════════
+const FBCFG={
+  apiKey:"AIzaSyDR2gru9PS8HBs9Zvaa3CJWg9PioPAAKSU",
+  authDomain:"hanja-cloud-c679c.firebaseapp.com",
+  projectId:"hanja-cloud-c679c",
+  storageBucket:"hanja-cloud-c679c.firebasestorage.app",
+  messagingSenderId:"70447829470",
+  appId:"1:70447829470:web:6a64d78deed41e0d0e8d4f"
+};
+const COL={hanja:"ian_hanja",phrase:"ian_phrase",sentence:"ian_sentence"};
+let _fs=null;
+let hanjas=[],phrases=[],sentences=[],lastDeleted=null;
+const LS={h:"hc_ian_h",p:"hc_ian_p",s:"hc_ian_s"};
+function loadLocal(){
+  const g=k=>{try{return JSON.parse(localStorage.getItem(k))||[];}catch(e){return[];}};
+  hanjas=g(LS.h);phrases=g(LS.p);sentences=g(LS.s);
+}
+function saveLocal(){
+  localStorage.setItem(LS.h,JSON.stringify(hanjas));
+  localStorage.setItem(LS.p,JSON.stringify(phrases));
+  localStorage.setItem(LS.s,JSON.stringify(sentences));
+}
+loadLocal();
+
+function tryFirestore(){
+  try{
+    if(!firebase.apps||!firebase.apps.length)firebase.initializeApp(FBCFG);
+    _fs=firebase.firestore();
+    document.getElementById('syncBadge').textContent='🟢 Firestore 연결됨';
+    document.getElementById('syncBadge').classList.add('live');
+    bindFirestore();
+  }catch(e){console.warn('Firestore init failed',e);}
+}
+function bindFirestore(){
+  const listen=(col,assign)=>_fs.collection(col).orderBy('timestamp','desc').onSnapshot(snap=>{
+    assign(snap.docs.map(d=>({id:d.id,...d.data()})));
+    saveLocal();
+  });
+  listen(COL.hanja,   arr=>hanjas=arr);
+  listen(COL.phrase,  arr=>phrases=arr);
+  listen(COL.sentence,arr=>sentences=arr);
+}
+
+// Load Firebase compat SDKs
+(function(){
+  const s1=document.createElement('script');
+  s1.src='https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js';
+  s1.onload=()=>{
+    const s2=document.createElement('script');
+    s2.src='https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js';
+    s2.onload=tryFirestore;
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s1);
+})();
+
+async function dbAdd(type,data){
+  if(_fs){const ref=await _fs.collection(COL[type]).add(data);return ref.id;}
+  const id='L'+Date.now();const item={id,...data};
+  if(type==='hanja')hanjas.unshift(item);
+  if(type==='phrase')phrases.unshift(item);
+  if(type==='sentence')sentences.unshift(item);
+  saveLocal();return id;
+}
+async function dbDel(type,id){
+  if(_fs){await _fs.collection(COL[type]).doc(id).delete();return;}
+  if(type==='hanja')hanjas=hanjas.filter(x=>x.id!==id);
+  if(type==='phrase')phrases=phrases.filter(x=>x.id!==id);
+  if(type==='sentence')sentences=sentences.filter(x=>x.id!==id);
+  saveLocal();
+}
+
+// ══════════════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════════════
+function esc(s){return(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+function flashBtn(btn,msg,ms=1600){const o=btn.textContent;btn.textContent=msg;btn.disabled=true;setTimeout(()=>{btn.textContent=o;btn.disabled=false;},ms);}
+function switchTab(t){
+  ['hanja','phrase','sentence','quiz'].forEach(id=>{
+    document.getElementById('section-'+id).classList.toggle('active',t===id);
+    document.getElementById('tab-'+id).classList.toggle('active',t===id);
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  HANJA SEARCH
+// ══════════════════════════════════════════════════════
+let _stimer=null,_selH=null;
+function onSearchInput(v){
+  clearTimeout(_stimer);
+  const q=v.trim();
+  const area=document.getElementById('candidateArea');
+  const icon=document.getElementById('searchIcon');
+  if(!q){area.innerHTML='';icon.textContent='🔍';return;}
+  const local=searchLocal(q);
+  if(local.length){renderCandidates(local,'내장 DB');icon.textContent='✅';return;}
+  icon.textContent='⏳';
+  area.innerHTML=`<div class="candidate-panel"><div class="api-loading"><div class="spinner"></div>AI 검색 중...</div></div>`;
+  _stimer=setTimeout(()=>searchAPI(q),700);
+}
+function searchLocal(q){
+  if(HIDX[q])return HIDX[q];
+  const res=[],seen=new Set();
+  HDB.forEach(h=>{if(!seen.has(h.c)&&h.r.includes(q)){res.push(h);seen.add(h.c);}});
+  return res.slice(0,20);
+}
+async function searchAPI(q){
+  const icon=document.getElementById('searchIcon');
+  const area=document.getElementById('candidateArea');
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',max_tokens:800,
+        system:'한자 사전 전문가. 한글 음을 입력받으면 해당 음의 한자 목록을 JSON 배열만 반환. 다른 텍스트 없이 순수 JSON만. 형식: [{"c":"字","r":"훈 음","rad":"부수자","rn":"부수이름","s":"획수","m":"뜻"}] 최대 12개.',
+        messages:[{role:'user',content:`"${q}" 음의 한자 목록`}]
+      })
+    });
+    const data=await res.json();
+    const txt=(data.content||[]).map(b=>b.text||'').join('').trim();
+    const arr=JSON.parse(txt);
+    if(Array.isArray(arr)&&arr.length){renderCandidates(arr,'AI 검색');icon.textContent='✨';}
+    else{area.innerHTML=`<div class="candidate-panel" style="padding:14px;color:var(--ash);font-size:0.88em;">「${q}」음의 한자를 찾지 못했습니다.</div>`;icon.textContent='❓';}
+  }catch(e){
+    area.innerHTML=`<div class="candidate-panel" style="padding:14px;color:var(--ash);font-size:0.88em;">검색 오류 — 직접 입력해 주세요.</div>`;
+    icon.textContent='⚠️';
+  }
+}
+function renderCandidates(list,src){
+  const items=list.map(h=>{
+    const j=esc(JSON.stringify(h));
+    return`<button class="candidate-btn" onclick="selectCandidate('${j}')" title="${h.m||''}">
+      <span class="cand-char">${h.c}</span>
+      <span class="cand-read">${h.r}</span>
+      <span class="cand-rad">${h.rad}</span>
+    </button>`;
+  }).join('');
+  document.getElementById('candidateArea').innerHTML=`
+    <div class="candidate-panel">
+      <div class="candidate-header"><span>한자 선택 — ${src}</span><span style="font-weight:400;color:var(--ash);">${list.length}개</span></div>
+      <div class="candidate-grid">${items}</div>
+    </div>`;
+}
+function selectCandidate(j){
+  const h=JSON.parse(j);_selH=h;
+  document.getElementById('hanjaChar').value=h.c;
+  document.getElementById('hanjaReading').value=h.r;
+  document.getElementById('hanjaRadical').value=h.rad+(h.rn?'('+h.rn+')':'');
+  document.getElementById('hanjaStrokes').value=h.s?h.s+'획':'';
+  document.getElementById('selectedArea').innerHTML=`
+    <div class="selected-box">
+      <div class="sel-big">${h.c}</div>
+      <div class="sel-meta">
+        <div class="sel-read">${h.r}</div>
+        <div class="sel-rad">부수: ${h.rad}${h.rn?' ('+h.rn+')':''} · ${h.s||'?'}획</div>
+        ${h.m?'<div style="font-size:0.78em;color:var(--ash);margin-top:3px;">'+h.m+'</div>':''}
+      </div>
+      <span class="sel-clear" onclick="clearSel()" title="선택 취소">✕</span>
+    </div>`;
+  document.getElementById('candidateArea').innerHTML='';
+  document.getElementById('hanjaSearchInput').value='';
+  document.getElementById('searchIcon').textContent='✅';
+}
+function clearSel(){
+  _selH=null;
+  ['hanjaChar','hanjaReading','hanjaRadical','hanjaStrokes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('selectedArea').innerHTML='';
+  document.getElementById('searchIcon').textContent='🔍';
+}
+
+// ══════════════════════════════════════════════════════
+//  HANJA MODE
+// ══════════════════════════════════════════════════════
+function setHanjaMode(m){
+  document.getElementById('hanjaManualPane').style.display=m==='manual'?'block':'none';
+  document.getElementById('hanjaQuickPane').style.display=m==='quick'?'block':'none';
+  document.getElementById('hanja-mode-manual').classList.toggle('active',m==='manual');
+  document.getElementById('hanja-mode-quick').classList.toggle('active',m==='quick');
+}
+
+// ══════════════════════════════════════════════════════
+//  HANJA SAVE / LIST
+// ══════════════════════════════════════════════════════
+async function saveHanja(){
+  const char=document.getElementById('hanjaChar').value.trim();
+  if(!char){alert('한자를 입력해주세요.');return;}
+  const data={char,reading:document.getElementById('hanjaReading').value.trim(),
+    radical:document.getElementById('hanjaRadical').value.trim(),
+    strokes:document.getElementById('hanjaStrokes').value.trim(),
+    memo:document.getElementById('hanjaMemo').value.trim(),
+    timestamp:Date.now()};
+  await dbAdd('hanja',data);
+  ['hanjaChar','hanjaReading','hanjaRadical','hanjaStrokes','hanjaMemo'].forEach(id=>document.getElementById(id).value='');
+  clearSel();
+  const btn=document.querySelector('[onclick="saveHanja()"]');if(btn)flashBtn(btn,'✅ 저장!');
+}
+
+let _qparsed=[];
+function parseHanjaQuick(v){
+  const prev=document.getElementById('hanjaQuickPreview');
+  const btn=document.getElementById('hanjaQuickSaveBtn');
+  const lines=v.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('//'));
+  _qparsed=lines.map(l=>{const p=l.split('|').map(x=>x.trim());return p.length>=2&&p[0]?{char:p[0],reading:p[1]||'',radical:p[2]||'',strokes:p[3]||'',memo:p[4]||''}:null;}).filter(Boolean);
+  if(!_qparsed.length){prev.innerHTML='';btn.disabled=true;btn.style.opacity='0.5';return;}
+  prev.innerHTML=_qparsed.map(h=>`<div class="preview-item"><div class="prev-big">${h.char}</div><div class="prev-meta"><div class="prev-read">${h.reading}</div>${h.radical?'<div class="prev-rad">부수: '+h.radical+'</div>':''}${h.strokes?'<div class="prev-note">'+h.strokes+(h.memo?' · '+h.memo:'')+'</div>':(h.memo?'<div class="prev-note">'+h.memo+'</div>':'')}</div></div>`).join('');
+  btn.textContent=`💾 전체 저장 (${_qparsed.length})`;btn.disabled=false;btn.style.opacity='1';
+}
+async function saveHanjaQuick(){
+  if(!_qparsed.length)return;
+  for(const h of _qparsed)await dbAdd('hanja',{...h,timestamp:Date.now()});
+  flashBtn(document.getElementById('hanjaQuickSaveBtn'),`✅ ${_qparsed.length}개 저장!`);
+  clearHanjaQuick();
+}
+function clearHanjaQuick(){
+  document.getElementById('hanjaQuickInput').value='';
+  document.getElementById('hanjaQuickPreview').innerHTML='';
+  const b=document.getElementById('hanjaQuickSaveBtn');b.disabled=true;b.style.opacity='0.5';b.textContent='💾 전체 저장';_qparsed=[];
+}
+function openHanjaList(sort){
+  if(!hanjas.length){showModal('📖 저장된 한자');document.getElementById('modalBody').innerHTML='<div class="empty-state"><div class="empty-hanja">漢</div>저장된 한자가 없습니다.</div>';return;}
+  let data=[...hanjas];
+  if(sort==='stroke')data.sort((a,b)=>(parseInt(a.strokes)||99)-(parseInt(b.strokes)||99));
+  const html=data.map(h=>`<div class="hanja-card"><div class="card-big">${h.char}</div><div class="card-meta"><div style="font-weight:700;font-size:1em;">${h.reading}</div>${h.radical?'<div><span class="tag-pill tag-rad">부수</span>'+h.radical+'</div>':''}${h.strokes?'<div><span class="tag-pill tag-s">획</span>'+h.strokes+'</div>':''}${h.memo?'<div style="font-size:0.8em;color:var(--ash);margin-top:4px;">'+h.memo+'</div>':''}</div><span class="delete-btn" onclick="softDel(\'hanja\',\'${h.id}\')">🗑</span></div>`).join('');
+  showModal(`📖 한자 ${data.length}자`);document.getElementById('modalBody').innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════════
+//  PHRASE
+// ══════════════════════════════════════════════════════
+async function savePhrase(){
+  const char=document.getElementById('phraseChar').value.trim();
+  if(!char){alert('성어를 입력해주세요.');return;}
+  await dbAdd('phrase',{char,reading:document.getElementById('phraseReading').value.trim(),meaning:document.getElementById('phraseMeaning').value.trim(),timestamp:Date.now()});
+  ['phraseChar','phraseReading','phraseMeaning'].forEach(id=>document.getElementById(id).value='');
+  const b=document.querySelector('[onclick="savePhrase()"]');if(b)flashBtn(b,'✅ 저장!');
+}
+let pPool=[],pIdx=0;
+function startPhraseReview(){if(!phrases.length){alert('저장된 성어가 없습니다.');return;}pPool=[...phrases].sort(()=>Math.random()-0.5);pIdx=0;showModal('🔗 성어 카드');showPhraseCard();}
+function showPhraseCard(){
+  if(pIdx>=pPool.length){document.getElementById('modalBody').innerHTML='<div class="result-center"><div class="result-emoji">🎉</div><p style="margin:12px 0 20px;font-size:1.1em;">전부 복습했습니다!</p><button class="btn btn-ink" style="width:100%;margin-bottom:10px;" onclick="startPhraseReview()">다시 시작</button><button class="btn btn-muted" style="width:100%;" onclick="closeModal()">닫기</button></div>';return;}
+  const p=pPool[pIdx];const pct=Math.round((pIdx+1)/pPool.length*100);
+  document.getElementById('modalBody').innerHTML=`<div class="quiz-progress"><div class="quiz-fill" style="width:${pct}%"></div></div><div class="quiz-counter">${pIdx+1}/${pPool.length}</div><div class="quiz-prompt"><div class="quiz-label">성어</div><div style="font-size:2em;font-weight:900;color:white;letter-spacing:4px;">${p.char}</div>${p.reading?'<div class="quiz-sub">'+p.reading+'</div>':''}</div>${p.meaning?'<div style="background:white;border-radius:12px;padding:14px 16px;margin-bottom:16px;border-left:4px solid var(--celadon);"><div style="font-size:0.7em;font-weight:700;letter-spacing:1px;color:var(--celadon);margin-bottom:5px;">뜻</div><div style="line-height:1.6;">'+p.meaning+'</div></div>':''}<div class="btn-grid-2"><button class="btn btn-muted" onclick="pIdx--;showPhraseCard()">← 이전</button><button class="btn btn-celadon" onclick="pIdx++;showPhraseCard()">다음 →</button></div><button class="btn btn-muted" style="width:100%;margin-top:10px;" onclick="closeModal()">닫기</button>`;
+}
+function openPhraseList(){
+  if(!phrases.length){showModal('🔗 성어');document.getElementById('modalBody').innerHTML='<div class="empty-state"><div class="empty-hanja">語</div>저장된 성어가 없습니다.</div>';return;}
+  const html=[...phrases].sort((a,b)=>b.timestamp-a.timestamp).map(p=>`<div class="phrase-card"><span class="delete-btn" onclick="softDel('phrase','${p.id}')">🗑</span><div class="pc-char">${p.char}</div>${p.reading?'<div class="pc-read">'+p.reading+'</div>':''}${p.meaning?'<div class="pc-mean">'+p.meaning+'</div>':''}</div>`).join('');
+  showModal(`🔗 성어 ${phrases.length}개`);document.getElementById('modalBody').innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════════
+//  SENTENCE
+// ══════════════════════════════════════════════════════
+async function saveSentence(){
+  const char=document.getElementById('sentChar').value.trim();
+  if(!char){alert('문장을 입력해주세요.');return;}
+  await dbAdd('sentence',{char,reading:document.getElementById('sentReading').value.trim(),meaning:document.getElementById('sentMeaning').value.trim(),source:document.getElementById('sentSource').value.trim(),timestamp:Date.now()});
+  ['sentChar','sentReading','sentMeaning','sentSource'].forEach(id=>document.getElementById(id).value='');
+  const b=document.querySelector('[onclick="saveSentence()"]');if(b)flashBtn(b,'✅ 저장!');
+}
+let sPool=[],sIdx=0;
+function startSentenceReview(){if(!sentences.length){alert('저장된 문장이 없습니다.');return;}sPool=[...sentences].sort(()=>Math.random()-0.5);sIdx=0;showModal('📜 문장 복습');showSentCard();}
+function showSentCard(){
+  if(sIdx>=sPool.length){document.getElementById('modalBody').innerHTML='<div class="result-center"><div class="result-emoji">🎉</div><p style="margin:12px 0 20px;font-size:1.1em;">모두 복습했습니다!</p><button class="btn btn-gold" style="width:100%;margin-bottom:10px;color:white;" onclick="startSentenceReview()">다시 시작</button><button class="btn btn-muted" style="width:100%;" onclick="closeModal()">닫기</button></div>';return;}
+  const s=sPool[sIdx];const pct=Math.round((sIdx+1)/sPool.length*100);
+  document.getElementById('modalBody').innerHTML=`<div class="quiz-progress"><div class="quiz-fill" style="width:${pct}%"></div></div><div class="quiz-counter">${sIdx+1}/${sPool.length}</div><div class="quiz-prompt"><div class="quiz-label">한문</div><div style="font-size:1.1em;font-weight:700;color:white;line-height:1.6;letter-spacing:2px;">${s.char}</div>${s.reading?'<div class="quiz-sub" style="margin-top:8px;">'+s.reading+'</div>':''}</div>${s.meaning?'<div style="background:white;border-radius:12px;padding:14px;margin-bottom:14px;border-left:4px solid var(--gold);"><div style="font-size:0.7em;color:var(--gold);font-weight:700;letter-spacing:1px;margin-bottom:4px;">해석</div><div style="line-height:1.6;">'+s.meaning+'</div>'+(s.source?'<div style="font-size:0.78em;color:var(--ash);margin-top:6px;">📚 '+s.source+'</div>':'')+'</div>':''}<div class="btn-grid-2"><button class="btn btn-muted" onclick="sIdx--;showSentCard()">← 이전</button><button class="btn btn-gold" style="color:white;" onclick="sIdx++;showSentCard()">다음 →</button></div><button class="btn btn-muted" style="width:100%;margin-top:10px;" onclick="closeModal()">닫기</button>`;
+}
+function openSentenceList(){
+  if(!sentences.length){showModal('📜 문장');document.getElementById('modalBody').innerHTML='<div class="empty-state"><div class="empty-hanja">文</div>저장된 문장이 없습니다.</div>';return;}
+  const html=[...sentences].sort((a,b)=>b.timestamp-a.timestamp).map(s=>`<div class="phrase-card" style="border-left-color:var(--gold);"><span class="delete-btn" onclick="softDel('sentence','${s.id}')">🗑</span><div class="pc-char" style="letter-spacing:2px;">${s.char}</div>${s.reading?'<div class="pc-read" style="color:var(--gold);">'+s.reading+'</div>':''}${s.meaning?'<div class="pc-mean">'+s.meaning+'</div>':''}${s.source?'<div style="font-size:0.75em;color:var(--ash);margin-top:4px;">📚 '+s.source+'</div>':''}</div>`).join('');
+  showModal(`📜 문장 ${sentences.length}개`);document.getElementById('modalBody').innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════════
+//  QUIZ
+// ══════════════════════════════════════════════════════
+let qPool=[],qIdx=0,qSeen=0;
+let dCtx=null,drawing=false,lx=0,ly=0;
+
+function startQuiz(scope){
+  const pool=scope==='today'?hanjas.filter(h=>h.timestamp>new Date().setHours(0,0,0,0)):[...hanjas];
+  if(!pool.length){alert(scope==='today'?'오늘 추가된 한자가 없습니다.':'저장된 한자가 없습니다.');return;}
+  qPool=pool.sort(()=>Math.random()-0.5);qIdx=0;qSeen=0;
+  showModal('✏️ 한자 쓰기 퀴즈');renderQuiz();
+}
+function renderQuiz(){
+  if(qIdx>=qPool.length){
+    document.getElementById('modalBody').innerHTML=`<div class="result-center"><div class="result-emoji">🎊</div><div class="result-count">${qSeen}/${qPool.length}</div><div style="color:var(--ash);margin-bottom:20px;">문제 확인 완료</div><button class="btn btn-vermil" style="width:100%;margin-bottom:10px;" onclick="startQuiz('all')">🔁 다시 풀기</button><button class="btn btn-muted" style="width:100%;" onclick="closeModal()">닫기</button></div>`;
+    return;
+  }
+  const h=qPool[qIdx];const pct=Math.round((qIdx+1)/qPool.length*100);
+  const hj=h.char.replace(/</g,'&lt;');
+  document.getElementById('modalBody').innerHTML=`
+    <div class="quiz-progress"><div class="quiz-fill" style="width:${pct}%"></div></div>
+    <div class="quiz-counter">${qIdx+1}/${qPool.length}</div>
+    <div class="quiz-prompt">
+      <div class="quiz-label">훈 · 음</div>
+      <div class="quiz-reading">${h.reading||'?'}</div>
+      ${h.radical?'<div class="quiz-sub">부수: '+h.radical+'</div>':''}
+      ${h.strokes?'<div style="font-size:0.85em;color:var(--ash);margin-top:6px;">획수: '+h.strokes+'</div>':''}
+    </div>
+    <div class="quiz-split">
+      <div class="canvas-pane">
+        <div class="pane-label">✏️ 여기에 써보세요</div>
+        <canvas id="drawCanvas" width="190" height="200"></canvas>
+        <div class="canvas-tools">
+          <button class="tool-btn" onclick="clearCanvas()">🗑 지우기</button>
+          <button class="tool-btn" onclick="setColor('#1a1a2e')">● 먹</button>
+          <button class="tool-btn" onclick="setColor('#c0392b')">● 주사</button>
+        </div>
+      </div>
+      <div class="quiz-divider">→</div>
+      <div class="answer-pane">
+        <div class="pane-label">정답 한자</div>
+        <div class="answer-box" id="ansBox">
+          <span id="ansChar" style="display:none;">${hj}</span>
+          <span style="color:var(--mist);font-size:0.3em;font-weight:400;">?</span>
+          <div class="ans-sub">정답 확인 후 표시</div>
+        </div>
+      </div>
+    </div>
+    <div class="quiz-btn-row">
+      <button class="btn btn-vermil" id="revBtn" onclick="revealAns()">👁 정답 보기</button>
+      <button class="btn btn-ink" onclick="nextQ()">다음 →</button>
+    </div>
+    <button class="btn btn-muted" style="width:100%;" onclick="closeModal()">✖ 종료</button>`;
+  const cv=document.getElementById('drawCanvas');
+  dCtx=cv.getContext('2d');
+  dCtx.strokeStyle='#1a1a2e';dCtx.lineWidth=4;dCtx.lineCap='round';dCtx.lineJoin='round';
+  drawGrid();bindCanvas(cv);
+}
+function drawGrid(){
+  if(!dCtx)return;
+  dCtx.save();dCtx.strokeStyle='#e8e2d8';dCtx.lineWidth=1;dCtx.setLineDash([4,4]);
+  dCtx.beginPath();dCtx.moveTo(95,0);dCtx.lineTo(95,200);dCtx.moveTo(0,100);dCtx.lineTo(190,100);dCtx.stroke();
+  dCtx.setLineDash([]);dCtx.restore();
+  dCtx.strokeStyle='#1a1a2e';dCtx.lineWidth=4;
+}
+function setColor(c){if(dCtx)dCtx.strokeStyle=c;}
+function bindCanvas(cv){
+  const pos=e=>{const r=cv.getBoundingClientRect(),sx=cv.width/r.width,sy=cv.height/r.height;if(e.touches)return[(e.touches[0].clientX-r.left)*sx,(e.touches[0].clientY-r.top)*sy];return[(e.clientX-r.left)*sx,(e.clientY-r.top)*sy];};
+  const st=e=>{e.preventDefault();drawing=true;[lx,ly]=pos(e);cv.classList.add('drawing');};
+  const mv=e=>{if(!drawing)return;e.preventDefault();const[x,y]=pos(e);dCtx.beginPath();dCtx.moveTo(lx,ly);dCtx.lineTo(x,y);dCtx.stroke();[lx,ly]=[x,y];};
+  const sp=()=>{drawing=false;cv.classList.remove('drawing');};
+  cv.addEventListener('mousedown',st);cv.addEventListener('mousemove',mv);cv.addEventListener('mouseup',sp);cv.addEventListener('mouseleave',sp);
+  cv.addEventListener('touchstart',st,{passive:false});cv.addEventListener('touchmove',mv,{passive:false});cv.addEventListener('touchend',sp);
+}
+function clearCanvas(){
+  if(!dCtx)return;
+  const cv=document.getElementById('drawCanvas');
+  dCtx.clearRect(0,0,cv.width,cv.height);drawGrid();
+}
+function revealAns(){
+  const box=document.getElementById('ansBox');const cs=document.getElementById('ansChar');if(!box||!cs)return;
+  const char=cs.textContent;
+  box.innerHTML=`<span style="font-size:inherit;font-weight:900;color:var(--brush);animation:brushReveal 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards;display:block;">${char}</span>`;
+  box.classList.add('shown');qSeen++;
+  const b=document.getElementById('revBtn');if(b){b.disabled=true;b.style.opacity='0.5';}
+}
+function nextQ(){qIdx++;renderQuiz();}
+
+// ══════════════════════════════════════════════════════
+//  MODAL
+// ══════════════════════════════════════════════════════
+function showModal(t){document.getElementById('modalTitle').textContent=t;document.getElementById('modal').classList.add('open');document.getElementById('overlay').classList.add('open');document.getElementById('modalBody').scrollTop=0;}
+function closeModal(){document.getElementById('modal').classList.remove('open');document.getElementById('overlay').classList.remove('open');dCtx=null;drawing=false;}
+function handleOverlayClick(){closeModal();}
+
+// ══════════════════════════════════════════════════════
+//  DELETE / UNDO
+// ══════════════════════════════════════════════════════
+async function softDel(type,id){
+  const map={hanja:hanjas,phrase:phrases,sentence:sentences};
+  const item=(map[type]||[]).find(x=>x.id===id);if(!item)return;
+  lastDeleted={type,id,data:{...item}};
+  await dbDel(type,id);
+  document.getElementById('undoBar').style.display='block';
+  setTimeout(()=>document.getElementById('undoBar').style.display='none',5000);
+  closeModal();
+}
+async function undoDelete(){
+  if(!lastDeleted)return;
+  await dbAdd(lastDeleted.type,lastDeleted.data);
+  lastDeleted=null;document.getElementById('undoBar').style.display='none';
+}
+</script>
+</body>
+</html>
