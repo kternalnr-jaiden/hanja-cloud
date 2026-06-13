@@ -138,6 +138,16 @@ textarea.input-style{resize:vertical;}
 .empty-hanja{font-size:3em;margin-bottom:8px;opacity:0.25;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}
 @keyframes brushReveal{from{opacity:0;transform:scale(0.7);}to{opacity:1;transform:scale(1);}}
+
+/* ── LOGIN SCREEN ── */
+#loginScreen{position:fixed;inset:0;background:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;padding:30px;}
+.login-title{font-size:3em;font-weight:900;color:#f0d080;letter-spacing:4px;margin-bottom:6px;}
+.login-sub{color:var(--ash);font-size:0.9em;margin-bottom:40px;letter-spacing:1px;}
+.login-btn{display:flex;align-items:center;gap:12px;background:white;color:#1a1a2e;border:none;border-radius:14px;padding:14px 28px;font-size:1em;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 20px rgba(0,0,0,0.3);transition:0.2s;}
+.login-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,0.4);}
+.login-btn img{width:22px;height:22px;}
+.login-err{color:#ff7675;font-size:0.82em;margin-top:16px;text-align:center;display:none;}
+#appWrap{display:none;width:100%;flex-direction:column;align-items:center;}
 @media(max-width:420px){
   .quiz-split{grid-template-columns:1fr;}
   .quiz-divider{display:none;}
@@ -146,12 +156,29 @@ textarea.input-style{resize:vertical;}
 </style>
 </head>
 <body>
+
+<!-- ══ LOGIN SCREEN ══ -->
+<div id="loginScreen">
+  <div class="login-title">漢字雲</div>
+  <div class="login-sub">한자운 · 학습 앱</div>
+  <button class="login-btn" onclick="googleLogin()">
+    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+    Google 계정으로 로그인
+  </button>
+  <div class="login-err" id="loginErr">접근 권한이 없는 계정입니다.</div>
+</div>
+
+<!-- ══ APP (로그인 후 표시) ══ -->
+<div id="appWrap">
 <header class="app-header">
   <div style="display:flex;align-items:baseline;">
     <span class="hanja-title">漢字雲</span>
     <span class="header-sub">한자운 · Ian</span>
   </div>
-  <span class="sync-badge" id="syncBadge">🔵 오프라인</span>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span class="sync-badge" id="syncBadge">🔵 오프라인</span>
+    <button onclick="googleLogout()" style="background:none;border:1px solid #444;color:var(--ash);border-radius:8px;padding:3px 8px;font-size:0.72em;cursor:pointer;font-family:inherit;">로그아웃</button>
+  </div>
 </header>
 
 <div class="tab-bar">
@@ -289,6 +316,7 @@ textarea.input-style{resize:vertical;}
   <div class="modal-body" id="modalBody"></div>
 </div>
 <div id="undoBar">삭제되었습니다.<span class="undo-link" onclick="undoDelete()">되돌리기</span></div>
+</div><!-- /appWrap -->
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -582,7 +610,6 @@ const FBCFG={
   appId:"1:70447829470:web:6a64d78deed41e0d0e8d4f"
 };
 const COL={hanja:"ian_hanja",phrase:"ian_phrase",sentence:"ian_sentence"};
-let _fs=null;
 let hanjas=[],phrases=[],sentences=[],lastDeleted=null;
 const LS={h:"hc_ian_h",p:"hc_ian_p",s:"hc_ian_s"};
 function loadLocal(){
@@ -596,15 +623,6 @@ function saveLocal(){
 }
 loadLocal();
 
-function tryFirestore(){
-  try{
-    if(!firebase.apps||!firebase.apps.length)firebase.initializeApp(FBCFG);
-    _fs=firebase.firestore();
-    document.getElementById('syncBadge').textContent='🟢 Firestore 연결됨';
-    document.getElementById('syncBadge').classList.add('live');
-    bindFirestore();
-  }catch(e){console.warn('Firestore init failed',e);}
-}
 function bindFirestore(){
   const listen=(col,assign)=>_fs.collection(col).orderBy('timestamp','desc').onSnapshot(snap=>{
     assign(snap.docs.map(d=>({id:d.id,...d.data()})));
@@ -615,18 +633,57 @@ function bindFirestore(){
   listen(COL.sentence,arr=>sentences=arr);
 }
 
-// Load Firebase compat SDKs
+// Load Firebase compat SDKs (App → Auth → Firestore 순서)
 (function(){
-  const s1=document.createElement('script');
-  s1.src='https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js';
-  s1.onload=()=>{
-    const s2=document.createElement('script');
-    s2.src='https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js';
-    s2.onload=tryFirestore;
-    document.head.appendChild(s2);
-  };
-  document.head.appendChild(s1);
+  const load=(src,cb)=>{const s=document.createElement('script');s.src=src;s.onload=cb;document.head.appendChild(s);};
+  load('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js',()=>{
+    load('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js',()=>{
+      load('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js',()=>{
+        initFirebase();
+      });
+    });
+  });
 })();
+
+// ══════════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════════
+const ALLOWED_EMAIL = 'kternalnr@gmail.com';
+let _auth=null, _fs=null;
+
+function initFirebase(){
+  if(!firebase.apps||!firebase.apps.length) firebase.initializeApp(FBCFG);
+  _auth = firebase.auth();
+  _fs   = firebase.firestore();
+
+  _auth.onAuthStateChanged(user=>{
+    if(user && user.email===ALLOWED_EMAIL){
+      // 허가된 사용자
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('appWrap').style.display='flex';
+      document.getElementById('syncBadge').textContent='🟢 Firestore 연결됨';
+      document.getElementById('syncBadge').classList.add('live');
+      bindFirestore();
+    } else if(user){
+      // 다른 구글 계정
+      _auth.signOut();
+      document.getElementById('loginErr').style.display='block';
+    } else {
+      // 미로그인
+      document.getElementById('loginScreen').style.display='flex';
+      document.getElementById('appWrap').style.display='none';
+    }
+  });
+}
+
+function googleLogin(){
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({login_hint: ALLOWED_EMAIL});
+  _auth.signInWithPopup(provider).catch(e=>console.warn('login error',e));
+}
+function googleLogout(){
+  _auth.signOut();
+}
 
 async function dbAdd(type,data){
   if(_fs){const ref=await _fs.collection(COL[type]).add(data);return ref.id;}
@@ -678,7 +735,7 @@ function searchLocal(q){
   HDB.forEach(h=>{if(!seen.has(h.c)&&h.r.includes(q)){res.push(h);seen.add(h.c);}});
   return res.slice(0,20);
 }
-const GEMINI_KEY = 'AIzaSyAlSrHxVbSRduciNgrFy9rmGvGZO4A7fj4';
+const GEMINI_KEY='AIzaSyDR2gru9PS8HBs9Zvaa3CJWg9PioPAAKSU'; // ← 본인 Gemini API 키로 교체
 
 async function searchAPI(q){
   const icon=document.getElementById('searchIcon');
@@ -691,9 +748,9 @@ async function searchAPI(q){
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           contents:[{parts:[{text:
-            `한글 음 "${q}"에 해당하는 한자 목록을 JSON 배열만 반환해. 다른 텍스트, 마크다운 없이 순수 JSON만.
+            `한글 음 "${q}"에 해당하는 한자 목록을 JSON 배열만 반환해. 마크다운 없이 순수 JSON만.
 형식: [{"c":"字","r":"훈 음","rad":"부수자","rn":"부수이름","s":"획수","m":"뜻"}]
-예: 수 → [{"c":"水","r":"물 수","rad":"水","rn":"물 수","s":"4","m":"물"},{"c":"手","r":"손 수","rad":"手","rn":"손 수","s":"4","m":"손"}]
+예시: 수 → [{"c":"水","r":"물 수","rad":"水","rn":"물 수","s":"4","m":"물"}]
 최대 12개.`
           }]}],
           generationConfig:{temperature:0.1,maxOutputTokens:800}
@@ -701,8 +758,8 @@ async function searchAPI(q){
       }
     );
     const data=await res.json();
-    const txt=(data.candidates?.[0]?.content?.parts?.[0]?.text||'').trim()
-      .replace(/```json|```/g,'').trim();
+    const txt=(data.candidates?.[0]?.content?.parts?.[0]?.text||'')
+      .trim().replace(/```json|```/g,'').trim();
     const arr=JSON.parse(txt);
     if(Array.isArray(arr)&&arr.length){renderCandidates(arr,'AI 검색');icon.textContent='✨';}
     else{area.innerHTML=`<div class="candidate-panel" style="padding:14px;color:var(--ash);font-size:0.88em;">「${q}」음의 한자를 찾지 못했습니다.</div>`;icon.textContent='❓';}
@@ -711,7 +768,6 @@ async function searchAPI(q){
     icon.textContent='⚠️';
   }
 }
-
 function renderCandidates(list,src){
   const items=list.map(h=>{
     const j=esc(JSON.stringify(h));
