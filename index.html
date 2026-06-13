@@ -678,21 +678,31 @@ function searchLocal(q){
   HDB.forEach(h=>{if(!seen.has(h.c)&&h.r.includes(q)){res.push(h);seen.add(h.c);}});
   return res.slice(0,20);
 }
+const GEMINI_KEY = 'AIzaSyAlSrHxVbSRduciNgrFy9rmGvGZO4A7fj4';
+
 async function searchAPI(q){
   const icon=document.getElementById('searchIcon');
   const area=document.getElementById('candidateArea');
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-6',max_tokens:800,
-        system:'한자 사전 전문가. 한글 음을 입력받으면 해당 음의 한자 목록을 JSON 배열만 반환. 다른 텍스트 없이 순수 JSON만. 형식: [{"c":"字","r":"훈 음","rad":"부수자","rn":"부수이름","s":"획수","m":"뜻"}] 최대 12개.',
-        messages:[{role:'user',content:`"${q}" 음의 한자 목록`}]
-      })
-    });
+    const res=await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          contents:[{parts:[{text:
+            `한글 음 "${q}"에 해당하는 한자 목록을 JSON 배열만 반환해. 다른 텍스트, 마크다운 없이 순수 JSON만.
+형식: [{"c":"字","r":"훈 음","rad":"부수자","rn":"부수이름","s":"획수","m":"뜻"}]
+예: 수 → [{"c":"水","r":"물 수","rad":"水","rn":"물 수","s":"4","m":"물"},{"c":"手","r":"손 수","rad":"手","rn":"손 수","s":"4","m":"손"}]
+최대 12개.`
+          }]}],
+          generationConfig:{temperature:0.1,maxOutputTokens:800}
+        })
+      }
+    );
     const data=await res.json();
-    const txt=(data.content||[]).map(b=>b.text||'').join('').trim();
+    const txt=(data.candidates?.[0]?.content?.parts?.[0]?.text||'').trim()
+      .replace(/```json|```/g,'').trim();
     const arr=JSON.parse(txt);
     if(Array.isArray(arr)&&arr.length){renderCandidates(arr,'AI 검색');icon.textContent='✨';}
     else{area.innerHTML=`<div class="candidate-panel" style="padding:14px;color:var(--ash);font-size:0.88em;">「${q}」음의 한자를 찾지 못했습니다.</div>`;icon.textContent='❓';}
@@ -701,6 +711,7 @@ async function searchAPI(q){
     icon.textContent='⚠️';
   }
 }
+
 function renderCandidates(list,src){
   const items=list.map(h=>{
     const j=esc(JSON.stringify(h));
